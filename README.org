@@ -1,0 +1,64 @@
+#+OPTIONS: ^:nil tags:nil num:nil
+
+* About
+
+This is a very simple minor mode to prettify OpenSCAD code.
+
+* Table of Contents                                       :TOC_2_gh:QUOTE:
+#+BEGIN_QUOTE
+- [[#about][About]]
+- [[#requirements][Requirements]]
+- [[#installation][Installation]]
+  - [[#with-use-package-and-straightel][With use-package and straight.el]]
+  - [[#manual-installation][Manual installation]]
+- [[#usage][Usage]]
+  - [[#minor-mode][Minor mode]]
+  - [[#commands][Commands]]
+#+END_QUOTE
+
+* Requirements
+
+| Name  | Version |
+|-------+---------|
+| Emacs |    29.1 |
+
+
+* Installation
+
+** With use-package and straight.el
+#+begin_src elisp :eval no
+(use-package scad-prettify
+  :straight (scad-prettify
+             :repo "KarimAziev/scad-prettify"
+             :type git
+             :host github
+             :flavor nil)
+  :commands (scad-prettify-buffer)
+  :hook (scad-mode . scad-prettify-mode))
+#+end_src
+
+** Manual installation
+
+Download the source code and put it wherever you like, e.g. into =~/.emacs.d/scad-prettify/=
+
+#+begin_src shell :eval no
+git clone https://github.com/KarimAziev/scad-prettify.git ~/.emacs.d/scad-prettify/
+#+end_src
+
+Add the downloaded directory to the load path:
+
+#+begin_src elisp :eval no
+(add-to-list 'load-path "~/.emacs.d/scad-prettify/")
+(require 'scad-prettify)
+#+end_src
+
+* Usage
+
+** Minor mode
+
+**** ~scad-prettify-mode~
+Enable automatic formatting of =scad= code before saving the buffer.
+** Commands
+
+**** ~scad-prettify-buffer~
+Format the buffer by adjusting braces, aligning variables, and indenting.
