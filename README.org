@@ -2,7 +2,11 @@
 
 * About
 
-This is a very simple minor mode to prettify OpenSCAD code.
+This is a very simple minor mode for formatting OpenSCAD code. Primarily, it:
+ - aligns variable assignments,
+ - removes multiple new lines before braces,
+ - applies some regexp transformations,
+ - reindents the buffer.
 
 * Table of Contents                                       :TOC_2_gh:QUOTE:
 #+BEGIN_QUOTE
@@ -12,8 +16,7 @@ This is a very simple minor mode to prettify OpenSCAD code.
   - [[#with-use-package-and-straightel][With use-package and straight.el]]
   - [[#manual-installation][Manual installation]]
 - [[#usage][Usage]]
-  - [[#minor-mode][Minor mode]]
-  - [[#commands][Commands]]
+- [[#customization][Customization]]
 #+END_QUOTE
 
 * Requirements
@@ -54,11 +57,10 @@ Add the downloaded directory to the load path:
 
 * Usage
 
-** Minor mode
+- ~M-x scad-prettify-mode~: toggles a minor mode in the current buffer that automatically formats OpenSCAD code before saving.
 
-**** ~scad-prettify-mode~
-Enable automatic formatting of =scad= code before saving the buffer.
-** Commands
+- ~M-x scad-prettify-buffer~: Formats the entire buffer.
 
-**** ~scad-prettify-buffer~
-Format the buffer by adjusting braces, aligning variables, and indenting.
+* Customization
+- =scad-prettify-formatters=: Add or remove specific formatters.
+- =scad-prettify-regexp-replacement-rules=: Customize rules for regexp-based formatting.
