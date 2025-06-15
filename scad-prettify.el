@@ -103,13 +103,17 @@
                                                         (group "(")))
                                                      " (" 2)
                                                     (re-search-forward
-                                                     ,(rx (seq ")"
-                                                           (group space
-                                                            (one-or-more space))))
+                                                     ,(rx
+                                                       (seq ")"
+                                                        (group space
+                                                         (one-or-more space))))
                                                      "" 1)
                                                     (re-search-forward
                                                      "){"
-                                                     ") {" 0))
+                                                     ") {" 0)
+                                                    (re-search-forward
+                                                     "^\\([\n][\n]+\\)"
+                                                     "\n" 0))
   "Alist of regular expression replacement rules for prettifying SCAD code.
 
 Each element in this list defines a rule for matching and replacing text and
@@ -258,6 +262,7 @@ is triggered."
     (scad-prettify--replace-in-buffer search_sym regexp replacement subexp
                                       matchers)))
 
+
 (defun scad-prettify--replace-in-buffer (search_sym regexp replacement &optional
                                                     subexp matchers)
   "Replace occurrences of REGEXP with REPLACEMENT, skipping strings/comments.
@@ -340,7 +345,29 @@ based on additional criteria."
               (setq start (point)))
             (when (and start end)
               (delete-region start
-                             end))))))))
+                             end)))))
+      (goto-char (point-max))
+      (while (re-search-backward
+              "}\\|{"
+              nil t
+              1)
+        (unless (scad-prettify--inside-string-or-comment-p)
+          (cond ((string= (match-string-no-properties 0) "}")
+                 (unless (looking-back "\\(^[\s\t]+\\)\\|\n" 0)
+                   (save-excursion
+                     (newline-and-indent))))
+                ((looking-at "{\\([\s\t]+\\)[\n]")
+                 (replace-match "" nil nil nil 1))
+                ((and (looking-at "{[^\n]")
+                      (not (save-excursion
+                             (goto-char (line-end-position))
+                             (scad-prettify--inside-string-or-comment-p))))
+                 (save-excursion
+                   (forward-char 1)
+                   (newline-and-indent)))))))))
+
+
+
 
 (defun scad-prettify-align-variables ()
   "Align variable assignments by padding spaces for consistent formatting."
