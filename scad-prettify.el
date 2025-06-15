@@ -6,7 +6,7 @@
 ;; URL: https://github.com/KarimAziev/scad-prettify
 ;; Version: 0.1.0
 ;; Keywords: languages
-;; Package-Requires: ((emacs "29.1"))
+;; Package-Requires: ((emacs "29.1") (scad-mode "96.0"))
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;; This file is NOT part of GNU Emacs.

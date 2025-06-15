@@ -21,15 +21,22 @@ This is a very simple minor mode for formatting OpenSCAD code. Primarily, it:
 
 * Requirements
 
-| Name  | Version |
-|-------+---------|
-| Emacs |    29.1 |
+| Name        | Version |
+|-------------+---------|
+| Emacs       | >= 29.1 |
+| [[https://github.com/openscad/emacs-scad-mode][scad-mode]]   | >= 96.0 |
+
 
 
 * Installation
 
+Firstly, ensure that you have installed [[https://github.com/openscad/emacs-scad-mode][scad-mode]].
+
 ** With use-package and straight.el
+
 #+begin_src elisp :eval no
+(use-package scad-mode)
+
 (use-package scad-prettify
   :straight (scad-prettify
              :repo "KarimAziev/scad-prettify"
