@@ -46,27 +46,70 @@
 
 ;;; Code:
 
+(require 'subr-x)
+(eval-when-compile
+  (require 'rx))
+(require 'scad-mode)
 
-(defcustom scad-prettify-regexp-replacement-rules '((re-search-forward
-                                                     "\n\\([ ]+\\)\n" "" 1 nil)
+
+(defcustom scad-prettify-regexp-replacement-rules `((re-search-forward
+                                                     ,(rx (seq "\n"
+                                                           (group
+                                                            (one-or-more " "))
+                                                           "\n"))
+                                                     ""
+                                                     1)
                                                     (re-search-forward
-                                                     "\\(^[\n]\\{2\\}\\)" "\n" 1
-                                                     nil)
+                                                     ,(rx (group bol
+                                                           (= 2 "\n")))
+                                                     "\n" 1)
                                                     (re-search-forward
-                                                     "[[(]\\([\n	 ]+\\)"
-                                                     "" 1 nil)
+                                                     ,(rx (seq (any "([")
+                                                           (group
+                                                            (one-or-more
+                                                             (any "\t\n ")))))
+                                                     "" 1)
                                                     (re-search-forward
-                                                     "\\([\n	 ]+\\)\\()\\|]\\)"
-                                                     "" 1 nil)
+                                                     ,(rx
+                                                       (seq
+                                                        (group
+                                                         (one-or-more
+                                                          (any
+                                                           "\t\n ")))
+                                                        (group
+                                                         (or ")" "]"))))
+                                                     "" 1)
                                                     (re-search-forward
-                                                     "\\([A-Za-z_][A-Za-z0-9_]*\\)\\([ 	\n]+\\)("
+                                                     ,(rx
+                                                       (seq
+                                                        (group
+                                                         (any "A-Za-z" "_")
+                                                         (zero-or-more
+                                                          (any "0-9A-Za-z" "_")))
+                                                        (group
+                                                         (one-or-more
+                                                          (any "\t\n ")))
+                                                        "("))
                                                      "" 2
                                                      ((:subexp-start 1
                                                        :not :symbol-at-point
                                                        (for if let))))
                                                     (re-search-forward
-                                                     "\\_<\\(for\\|let\\|if\\)\\_>\\((\\)"
-                                                     " (" 2))
+                                                     ,(rx
+                                                       (seq symbol-start
+                                                        (group
+                                                         (or "for" "let" "if"))
+                                                        symbol-end
+                                                        (group "(")))
+                                                     " (" 2)
+                                                    (re-search-forward
+                                                     ,(rx (seq ")"
+                                                           (group space
+                                                            (one-or-more space))))
+                                                     "" 1)
+                                                    (re-search-forward
+                                                     "){"
+                                                     ") {" 0))
   "Alist of regular expression replacement rules for prettifying SCAD code.
 
 Each element in this list defines a rule for matching and replacing text and
@@ -186,7 +229,19 @@ is triggered."
   :type 'hook)
 
 (defconst scad-prettify--variable-regex
-  "^[[:space:]]*\\([A-Za-z_][A-Za-z0-9_]*\\)[[:space:]]*\\(=\\)[[:space:]]*\\([^;]+;\\)"
+  (rx (seq bol
+           (zero-or-more space)
+           (group
+            (any "A-Za-z" "_")
+            (zero-or-more
+             (any "0-9A-Za-z" "_")))
+           (zero-or-more space)
+           (group "=")
+           (zero-or-more space)
+           (group
+            (one-or-more
+             (not (any ";")))
+            ";")))
   "Regex pattern matching SCAD variable declarations.")
 
 
