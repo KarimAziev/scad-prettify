@@ -67,24 +67,44 @@
                                                     (re-search-forward
                                                      "\\_<\\(for\\|let\\|if\\)\\_>\\((\\)"
                                                      " (" 2))
-  "Alist of regex replacement rules for prettifying SCAD code.
+  "Alist of regular expression replacement rules for prettifying SCAD code.
 
-Each rule is a list containing a search function,a regular expression, a
-replacement string, a subexpression index, and optional additional matchers.
+Each element in this list defines a rule for matching and replacing text and
+should be a list of the form: (SEARCH-FN REGEXP REPLACEMENT SUBEXP [MATCHERS])
 
-The search function can be either `re-search-forward' or
-`re-search-backward', determining the direction of the search.
+- SEARCH-FN: A function (either `re-search-forward' or `re-search-backward')
+  that scans the buffer in the specified direction to find matches for REGEXP.
 
-The regular expression specifies the pattern to search for, and the
-replacement string defines what the matched text should be replaced
-with.
+- REGEXP: The regular expression to match text patterns in the buffer.
 
-The subexpression index indicates which part of the match to replace,
-starting from 0 for the entire match.
+- REPLACEMENT: The string that will replace the matched text (or just the
+  specified subexpression).
 
-Optional matchers can further refine the replacement conditions,
-allowing for checks on specific subexpression positions or predicates
-on the matched text."
+- SUBEXP: An integer indicating the subexpression index to replace (0 means the
+  entire match).
+
+- MATCHERS (optional): A list of extra matching criteria that are further
+  applied to a found match.
+  Each extra matcher specifies:
+    - A position specifier (`:subexp-start' or `:subexp-end') indicating whether
+      the condition should be evaluated at the beginning or end of the specified
+      subexpression.
+    - One or more conditions that must hold at that position.
+      These conditions can be of different types:
+        - `:looking-at': Checks whether the text at that position matches a
+          given regular expression.
+        - `:symbol-at-point': Verifies if the symbol at that position is one of
+          a given set.
+        - `:predicate': Calls a custom function to determine whether the
+          condition is met.
+    - An optional `:not' modifier that inverts the result of the condition.
+
+When a regexp match is found, any extra matchers are evaluated immediately after
+the match (but before performing the replacement).
+
+For the replacement to occur, every extra matcher must succeed (i.e. return
+non-nil), if any matcher returns nil (or, when using `:not', returns non-nil
+when negated), then that candidate match is rejected and skipped."
   :group 'scad-prettify
   :type '(repeat
           (list
@@ -155,12 +175,19 @@ on the matched text."
 
 (defcustom scad-prettify-formatters '(scad-prettify-format-braces
                                       scad-prettify-align-variables)
-  "Scad-Prettify."
+  "List of functions to format SCAD code, such as adjusting braces and alignment.
+
+Each function in the list should take no arguments and perform a specific
+formatting task.
+
+The functions are executed in the order they appear in the list when formatting
+is triggered."
   :group 'scad-prettify
   :type 'hook)
 
 (defconst scad-prettify--variable-regex
-  "^[[:space:]]*\\([A-Za-z_][A-Za-z0-9_]*\\)[[:space:]]*\\(=\\)[[:space:]]*\\([^;]+;\\)")
+  "^[[:space:]]*\\([A-Za-z_][A-Za-z0-9_]*\\)[[:space:]]*\\(=\\)[[:space:]]*\\([^;]+;\\)"
+  "Regex pattern matching SCAD variable declarations.")
 
 
 (defun scad-prettify--inside-string-or-comment-p ()
