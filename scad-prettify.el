@@ -336,12 +336,24 @@ based on additional criteria."
 (defun scad-prettify-buffer ()
   "Format the buffer by adjusting braces, aligning variables, and indenting."
   (interactive)
-  (with-undo-amalgamate
-    (save-excursion
-      (scad-prettify--format-by-regex)
-      (run-hooks 'scad-prettify-formatters)
-      (indent-region (point-min)
-                     (point-max)))))
+  (let* ((buff (current-buffer))
+         (result (with-temp-buffer
+                   (insert-buffer-substring buff)
+                   (let ((scad-mode-hook nil))
+                     (scad-mode))
+                   (let ((indent-tabs-mode nil)
+                         (inhibit-message t))
+                     (scad-prettify--format-by-regex)
+                     (run-hooks 'scad-prettify-formatters)
+                     (indent-region (point-min)
+                                    (point-max))
+                     (buffer-string)))))
+    (unless (string= (buffer-substring-no-properties (point-min)
+                                                     (point-max))
+                     result)
+      (replace-region-contents (point-min)
+                               (point-max)
+                               (lambda () result)))))
 
 ;;;###autoload
 (define-minor-mode scad-prettify-mode
