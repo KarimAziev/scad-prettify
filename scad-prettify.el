@@ -78,7 +78,10 @@
                                                            "\t\n ")))
                                                         (group
                                                          (or ")" "]"))))
-                                                     "" 1)
+                                                     "" 1
+                                                     ((:subexp-start 0
+                                                       :not
+                                                       :inside-comment-or-string)))
                                                     (re-search-forward
                                                      ,(rx
                                                        (seq
@@ -189,7 +192,7 @@ when negated), then that candidate match is rejected and skipped."
               (set
                :inline t
                :tag "not"
-               :format "%t %v"
+               :format "%t %v\n"
                (const
                 :format ""
                 :not))
@@ -209,9 +212,30 @@ when negated), then that candidate match is rejected and skipped."
                 :format "%v"
                 :inline t
                 (const
-                 :format " "
+                 :format ""
                  :value :symbol-at-point)
                 (repeat :tag "symbol at point one of" (symbol)))
+               (list
+                :inline t
+                :tag "inside comment or string"
+                :format "%t%v\n"
+                (const
+                 :format ""
+                 :value :inside-comment-or-string))
+               (list
+                :inline t
+                :tag "inside comment"
+                :format "%t%v\n"
+                (const
+                 :format ""
+                 :value :inside-comment))
+               (list
+                :inline t
+                :tag "inside string"
+                :format "%t%v\n"
+                (const
+                 :format ""
+                 :value :inside-string))
                (list
                 :tag "predicate"
                 :inline t
@@ -285,47 +309,67 @@ based on additional criteria."
                    (point-max)))
       (while (funcall search_sym regexp nil t 1)
         (unless (scad-prettify--inside-string-or-comment-p)
-          (when (or (not matchers)
-                    (not (catch 'mismatch
-                           (dolist (matchers-plist matchers)
-                             (let ((pos (or (memq :subexp-start matchers-plist)
-                                            (memq :subexp-end matchers-plist)))
-                                   (pl matchers-plist)
-                                   (negatep (memq :not matchers-plist)))
-                               (save-excursion
-                                 (goto-char (funcall (if (eq (car pos)
-                                                             :subexp-start)
-                                                         #'match-beginning
-                                                       #'match-end)
-                                                     (cadr pos)))
-                                 (save-match-data
-                                   (while pl
-                                     (let ((key (car pl))
-                                           (matcher (cadr pl)))
-                                       (cond ((eq key :not)
-                                              (setq pl (cdr pl)))
-                                             ((memq key '(:subexp-end
-                                                          :subexp-start))
-                                              (setq pl (cddr pl)))
-                                             (t
-                                              (let ((result
-                                                     (pcase key
-                                                       (:looking-at
-                                                        (looking-at matcher 0))
-                                                       (:symbol-at-point
-                                                        (let
-                                                            ((sym
-                                                              (symbol-at-point)))
-                                                          (memq sym matcher)))
-                                                       (_
-                                                        (save-excursion
-                                                          (funcall matcher))))))
-                                                (when negatep
-                                                  (setq result (not result)))
-                                                (unless result
-                                                  (throw 'mismatch t))
-                                                (setq pl (cddr pl))))))))))))))
+          (when (or
+                 (not matchers)
+                 (not
+                  (catch 'mismatch
+                    (dolist (matchers-plist matchers)
+                      (let ((pos (or (memq :subexp-start matchers-plist)
+                                     (memq :subexp-end matchers-plist)))
+                            (pl matchers-plist)
+                            (negatep (memq :not matchers-plist)))
+                        (save-excursion
+                          (goto-char (funcall (if (eq (car pos)
+                                                      :subexp-start)
+                                                  #'match-beginning
+                                                #'match-end)
+                                              (cadr pos)))
+                          (save-match-data
+                            (while pl
+                              (let ((key (car pl))
+                                    (matcher (cadr pl)))
+                                (cond ((eq key :not)
+                                       (setq pl (cdr pl)))
+                                      ((memq key '(:subexp-end
+                                                   :subexp-start))
+                                       (setq pl (cddr pl)))
+                                      (t
+                                       (let ((result
+                                              (pcase key
+                                                (:looking-at
+                                                 (looking-at matcher 0))
+                                                (:inside-comment-or-string
+                                                 (scad-prettify--inside-string-or-comment-p))
+                                                (:symbol-at-point
+                                                 (let ((sym
+                                                        (symbol-at-point)))
+                                                   (memq sym matcher)))
+                                                ((or :inside-comment
+                                                     :inside-string)
+                                                 (nth (if
+                                                          (eq key
+                                                              :inside-comment)
+                                                          4 3)
+                                                      (syntax-ppss
+                                                       (point))))
+                                                (_
+                                                 (save-excursion
+                                                   (funcall matcher))))))
+                                         (when negatep
+                                           (setq result (not result)))
+                                         (unless result
+                                           (throw 'mismatch t))
+                                         (setq pl (funcall
+                                                   (if (memq key
+                                                             '(:inside-comment-or-string
+                                                               :inside-comment
+                                                               :inside-string))
+                                                       #'cdr
+                                                     #'cddr)
+                                                   pl))))))))))))))
             (replace-match replacement nil nil nil subexp)))))))
+
+
 
 
 (defun scad-prettify-format-braces ()
