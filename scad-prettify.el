@@ -98,6 +98,12 @@
                                                        :not :symbol-at-point
                                                        (for if let))))
                                                     (re-search-forward
+                                                     "[)]\\([\n]+[\s\t]*\\){"
+                                                     "" 1
+                                                     ((:subexp-start 0
+                                                       :not
+                                                       :inside-comment-or-string)))
+                                                    (re-search-forward
                                                      ,(rx
                                                        (seq symbol-start
                                                         (group
@@ -257,19 +263,7 @@ is triggered."
   :type 'hook)
 
 (defconst scad-prettify--variable-regex
-  (rx (seq bol
-           (zero-or-more space)
-           (group
-            (any "A-Za-z" "_")
-            (zero-or-more
-             (any "0-9A-Za-z" "_")))
-           (zero-or-more space)
-           (group "=")
-           (zero-or-more space)
-           (group
-            (one-or-more
-             (not (any ";")))
-            ";")))
+  "^[[:space:]]*\\([0-9A-Z_a-z]*\\)[[:space:]]*\\(=\\)[[:space:]]*\\([^=][^;]+;\\)"
   "Regex pattern matching SCAD variable declarations.")
 
 
@@ -435,6 +429,7 @@ based on additional criteria."
                   (value (match-string-no-properties 3))
                   (start (match-beginning 0))
                   (end (match-end 0)))
+              (setq value (string-trim-left value))
               (let ((rep (concat var-name
                                  (make-string
                                   (1+ (- longest-len
@@ -455,6 +450,78 @@ based on additional criteria."
                 (delete-region start end)
                 (save-excursion
                   (insert rep))))))))))
+
+(defun scad-prettify--goto-line (line)
+  "Move cursor to line LINE."
+  (goto-char (point-min))
+  (forward-line (1- line)))
+
+(defun scad-prettify--apply-rcs-patch (patch-buffer)
+  "Apply an RCS-formatted diff from PATCH-BUFFER to the current buffer."
+  (let ((target-buffer (current-buffer))
+        (line-offset 0))
+    (save-excursion
+      (with-current-buffer patch-buffer
+        (goto-char (point-min))
+        (while (not (eobp))
+          (unless (looking-at "^\\([ad]\\)\\([0-9]+\\) \\([0-9]+\\)")
+            (error
+             "Invalid rcs patch or internal error in scad-prettify--apply-rcs-patch"))
+          (forward-line)
+          (let ((action (match-string 1))
+                (from (string-to-number (match-string 2)))
+                (len  (string-to-number (match-string 3))))
+            (cond ((equal action "a")
+                   (let ((start (point)))
+                     (forward-line len)
+                     (let ((text (buffer-substring start (point))))
+                       (with-current-buffer target-buffer
+                         (setq line-offset (- line-offset len))
+                         (goto-char (point-min))
+                         (forward-line (- from len line-offset))
+                         (insert text)))))
+                  ((equal action "d")
+                   (with-current-buffer target-buffer
+                     (scad-prettify--goto-line (- from line-offset))
+                     (setq line-offset (+ line-offset len))
+                     (let ((beg (point)))
+                       (forward-line len)
+                       (delete-region (point) beg))))
+                  (t
+                   (error
+                    "Invalid rcs patch or internal error in scad-prettify--apply-rcs-patch")))))))))
+
+(defun scad-prettify--apply-patch (beg end replacement)
+  "Apply a diff patch to the current buffer.
+
+Argument BEG is the beginning position in the buffer where the patch will be
+applied.
+
+Argument END is the ending position in the buffer where the patch will be
+applied.
+
+Argument REPLACEMENT is the string that will replace the text between BEG and
+END."
+  (let* ((outputfile (make-temp-file "scad-prettify" nil "el"))
+         (patchbuf (get-buffer-create "*scad prettify patch*"))
+         (coding-system-for-read 'utf-8)
+         (coding-system-for-write 'utf-8)
+         (col (current-column)))
+    (unwind-protect
+        (save-restriction
+          (write-region replacement nil outputfile nil 'silent)
+          (with-current-buffer patchbuf
+            (erase-buffer))
+          (progn
+            (call-process-region beg
+                                 end "diff" nil patchbuf nil "-n"
+                                 "--strip-trailing-cr" "-"
+                                 outputfile)
+            (narrow-to-region beg end)
+            (scad-prettify--apply-rcs-patch patchbuf)
+            (move-to-column col t)))
+      (kill-buffer patchbuf)
+      (delete-file outputfile))))
 
 
 
@@ -477,9 +544,9 @@ based on additional criteria."
     (unless (string= (buffer-substring-no-properties (point-min)
                                                      (point-max))
                      result)
-      (replace-region-contents (point-min)
-                               (point-max)
-                               (lambda () result)))))
+      (scad-prettify--apply-patch
+       (point-min)
+       (point-max) result))))
 
 ;;;###autoload
 (define-minor-mode scad-prettify-mode
