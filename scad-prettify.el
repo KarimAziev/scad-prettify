@@ -405,7 +405,15 @@ based on additional criteria."
                    (newline-and-indent)))))))))
 
 
+(defun scad-prettify--top-level-p (&optional pos)
+  "Determine if POS is at top-level, not in a comment or string.
 
+Optional argument POS is a buffer position, defaulting to the current point."
+  (let* ((pps (syntax-ppss (or pos (point))))
+         (level (car pps)))
+    (and (zerop level)
+         (not (or (nth 4 pps)
+                  (nth 3 pps))))))
 
 (defun scad-prettify-align-variables ()
   "Align variable assignments by padding spaces for consistent formatting."
@@ -416,7 +424,9 @@ based on additional criteria."
         (goto-char (point-min))
         (while
             (when (and (re-search-forward scad-prettify--variable-regex nil t 1)
-                       (zerop (car (syntax-ppss (point)))))
+                       (scad-prettify--top-level-p)
+                       (save-excursion
+                         (scad-prettify--top-level-p (match-beginning 0))))
               (let ((var-name (match-string-no-properties 1)))
                 (setq last-var-end (match-end 0))
                 (setq longest-len (max (or longest-len 0)
@@ -425,31 +435,35 @@ based on additional criteria."
           (goto-char last-var-end)
           (while
               (re-search-backward scad-prettify--variable-regex nil t 1)
-            (let ((var-name (match-string-no-properties 1))
-                  (value (match-string-no-properties 3))
-                  (start (match-beginning 0))
-                  (end (match-end 0)))
-              (setq value (string-trim-left value))
-              (let ((rep (concat var-name
-                                 (make-string
-                                  (1+ (- longest-len
-                                         (length var-name)))
-                                  ?\s)
-                                 "= ")))
-                (if (not (string-match-p "\n" value))
-                    (setq rep (concat rep value))
-                  (let* ((lines (split-string value "\n" t))
-                         (first-line (pop lines))
-                         (spaces (make-string (1+ (length rep)) ?\s)))
-                    (setq lines (mapconcat (lambda (line)
-                                             (concat spaces
-                                                     (string-trim line)))
-                                           lines
-                                           "\n"))
-                    (setq rep (concat rep first-line "\n" lines))))
-                (delete-region start end)
-                (save-excursion
-                  (insert rep))))))))))
+            (when (and (scad-prettify--top-level-p)
+                       (save-excursion
+                         (scad-prettify--top-level-p
+                          (match-end 0))))
+              (let ((var-name (match-string-no-properties 1))
+                    (value (match-string-no-properties 3))
+                    (start (match-beginning 0))
+                    (end (match-end 0)))
+                (setq value (string-trim-left value))
+                (let ((rep (concat var-name
+                                   (make-string
+                                    (1+ (- longest-len
+                                           (length var-name)))
+                                    ?\s)
+                                   "= ")))
+                  (if (not (string-match-p "\n" value))
+                      (setq rep (concat rep value))
+                    (let* ((lines (split-string value "\n" t))
+                           (first-line (pop lines))
+                           (spaces (make-string (1+ (length rep)) ?\s)))
+                      (setq lines (mapconcat (lambda (line)
+                                               (concat spaces
+                                                       (string-trim line)))
+                                             lines
+                                             "\n"))
+                      (setq rep (concat rep first-line "\n" lines))))
+                  (delete-region start end)
+                  (save-excursion
+                    (insert rep)))))))))))
 
 (defun scad-prettify--goto-line (line)
   "Move cursor to line LINE."
