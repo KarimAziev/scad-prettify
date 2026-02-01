@@ -47,30 +47,30 @@
 ;;; Code:
 
 (require 'subr-x)
+
 (eval-when-compile
   (require 'rx))
 
 (require 'scad-mode)
 (require 'project)
 
-
 (defcustom scad-prettify-regexp-replacement-rules `((re-search-forward
                                                      ,(rx (seq "\n"
-                                                               (group
-                                                                (one-or-more " "))
-                                                               "\n"))
+                                                           (group
+                                                            (one-or-more " "))
+                                                           "\n"))
                                                      ""
                                                      1)
                                                     (re-search-forward
                                                      ,(rx (group bol
-                                                                 (= 2 "\n")))
+                                                           (= 2 "\n")))
                                                      "\n" 1)
                                                     (re-search-forward
                                                      ,(rx
                                                        (seq (any "([")
-                                                            (group
-                                                             (one-or-more
-                                                              (any "\t\n ")))))
+                                                        (group
+                                                         (one-or-more
+                                                          (any "\t\n ")))))
                                                      "" 1)
                                                     (re-search-forward
                                                      ,(rx
@@ -83,8 +83,8 @@
                                                          (or ")" "]"))))
                                                      "" 1
                                                      ((:subexp-start 0
-                                                                     :not
-                                                                     :inside-comment-or-string)))
+                                                       :not
+                                                       :inside-comment-or-string)))
                                                     (re-search-forward
                                                      ,(rx
                                                        (seq
@@ -98,30 +98,30 @@
                                                         "("))
                                                      "" 2
                                                      ((:subexp-start 1
-                                                                     :not
-                                                                     :symbol-at-point
-                                                                     (for if let))))
+                                                       :not
+                                                       :symbol-at-point
+                                                       (for if let))))
                                                     (re-search-forward
                                                      "[)]\\([\n]+[\s\t]*\\){"
                                                      "" 1
                                                      ((:subexp-start 0
-                                                                     :not
-                                                                     :inside-comment-or-string)))
+                                                       :not
+                                                       :inside-comment-or-string)))
                                                     (re-search-forward
                                                      ,(rx
                                                        (seq symbol-start
-                                                            (group
-                                                             (or "for" "let"
-                                                                 "if"))
-                                                            symbol-end
-                                                            (group "(")))
+                                                        (group
+                                                         (or "for" "let"
+                                                          "if"))
+                                                        symbol-end
+                                                        (group "(")))
                                                      " (" 2)
                                                     (re-search-forward
                                                      ,(rx
                                                        (seq ")"
-                                                            (group space
-                                                                   (one-or-more
-                                                                    space))))
+                                                        (group space
+                                                         (one-or-more
+                                                          space))))
                                                      "" 1)
                                                     (re-search-forward
                                                      "){"
@@ -134,15 +134,15 @@
                                                      " \\& "
                                                      1
                                                      ((:subexp-end 1
-                                                                   :not
-                                                                   :inside-comment-or-string)))
+                                                       :not
+                                                       :inside-comment-or-string)))
                                                     (re-search-backward
                                                      "\\([,]\\)[0-9a-z]+"
                                                      "\\& "
                                                      1
                                                      ((:subexp-end 1
-                                                                   :not
-                                                                   :inside-comment-or-string))))
+                                                       :not
+                                                       :inside-comment-or-string))))
   "Alist of regular expression replacement rules for prettifying SCAD code.
 
 Each element in this list defines a rule for matching and replacing text and
@@ -195,81 +195,80 @@ when negated), then that candidate match is rejected and skipped."
             :value "")
            (integer :tag "subexpression" 0)
            (repeat :tag "Extra matchers"
-                   (list
-                    :format "%v"
-                    (list
-                     :inline t
-                     :format "%t\n%v"
-                     :tag "If at"
-                     (radio
-                      :format "%v"
-                      :value
-                      :subexp-start
-                      (const
-                       :tag "start"
-                       :value :subexp-start)
-                      (const
-                       :tag "end"
-                       :value :subexp-end))
-                     (integer :tag "of subexpression"))
-                    (list
-                     :format "%v"
-                     :inline t
-                     (set
-                      :inline t
-                      :tag "not"
-                      :format "%t %v\n"
-                      (const
-                       :format ""
-                       :not))
-                     (radio
-                      :inline t
-                      :format "%v"
-                      :value :looking-at
-                      (list
-                       :inline t
-                       :tag "looking at"
-                       (const
-                        :format ""
-                        :value :looking-at)
-                       (regexp :tag
-                               "regular expression"))
-                      (list
-                       :format "%v"
-                       :inline t
-                       (const
-                        :format ""
-                        :value :symbol-at-point)
-                       (repeat :tag "symbol at point one of" (symbol)))
-                      (list
-                       :inline t
-                       :tag "inside comment or string"
-                       :format "%t%v\n"
-                       (const
-                        :format ""
-                        :value :inside-comment-or-string))
-                      (list
-                       :inline t
-                       :tag "inside comment"
-                       :format "%t%v\n"
-                       (const
-                        :format ""
-                        :value :inside-comment))
-                      (list
-                       :inline t
-                       :tag "inside string"
-                       :format "%t%v\n"
-                       (const
-                        :format ""
-                        :value :inside-string))
-                      (list
-                       :tag "predicate"
-                       :inline t
-                       (const
-                        :format ""
-                        :value :predicate)
-                       (function :tag "Custom predicate function")))))))))
-
+            (list
+             :format "%v"
+             (list
+              :inline t
+              :format "%t\n%v"
+              :tag "If at"
+              (radio
+               :format "%v"
+               :value
+               :subexp-start
+               (const
+                :tag "start"
+                :value :subexp-start)
+               (const
+                :tag "end"
+                :value :subexp-end))
+              (integer :tag "of subexpression"))
+             (list
+              :format "%v"
+              :inline t
+              (set
+               :inline t
+               :tag "not"
+               :format "%t %v\n"
+               (const
+                :format ""
+                :not))
+              (radio
+               :inline t
+               :format "%v"
+               :value :looking-at
+               (list
+                :inline t
+                :tag "looking at"
+                (const
+                 :format ""
+                 :value :looking-at)
+                (regexp :tag
+                 "regular expression"))
+               (list
+                :format "%v"
+                :inline t
+                (const
+                 :format ""
+                 :value :symbol-at-point)
+                (repeat :tag "symbol at point one of" (symbol)))
+               (list
+                :inline t
+                :tag "inside comment or string"
+                :format "%t%v\n"
+                (const
+                 :format ""
+                 :value :inside-comment-or-string))
+               (list
+                :inline t
+                :tag "inside comment"
+                :format "%t%v\n"
+                (const
+                 :format ""
+                 :value :inside-comment))
+               (list
+                :inline t
+                :tag "inside string"
+                :format "%t%v\n"
+                (const
+                 :format ""
+                 :value :inside-string))
+               (list
+                :tag "predicate"
+                :inline t
+                (const
+                 :format ""
+                 :value :predicate)
+                (function :tag "Custom predicate function")))))))))
 
 (defcustom scad-prettify-formatters '(scad-prettify-format-braces
                                       scad-prettify-align-args
@@ -313,7 +312,6 @@ is triggered."
     (scad-prettify--replace-in-buffer search_sym regexp replacement subexp
                                       matchers)))
 
-
 (defun scad-prettify--all-pass (filters)
   "Create an unary predicate function from FILTERS.
 Return t if every one of the provided predicates is satisfied by provided
@@ -323,6 +321,7 @@ Return t if every one of the provided predicates is satisfied by provided
            (dolist (filter filters)
              (unless (funcall filter item)
                (throw 'found t)))))))
+
 (defun scad-prettify--project-files (project &rest filters)
   "Filter PROJECT files using optional sequential filters.
 
@@ -338,6 +337,7 @@ to each file within the project."
     (seq-filter
      filter
      (project-files project))))
+
 (defun scad-prettify--project-name (&optional project)
   "Return expanded PROJECT root directory path for project or current project.
 
@@ -350,6 +350,7 @@ it attempts to use the current PROJECT by default."
                           (with-no-warnings
                             (car (project-roots project))))))
     (expand-file-name proj-dir)))
+
 (defun scad-prettify--project-scad-files (project &rest filters)
   "Filter and list PROJECT files with \".scad\" extension, applying FILTERS.
 
@@ -366,6 +367,7 @@ file within the project."
            (if filters
                (append (list base-filter) filters)
              (list base-filter)))))
+
 (defun scad-prettify--backward-whitespace ()
   "Skip backward over whitespace and comments."
   (while (progn
@@ -394,7 +396,6 @@ file within the project."
       (forward-comment 1)
       (skip-chars-forward "\s\t\n"))
     (- (point) pos)))
-
 
 (defun scad-prettify--replace-in-buffer (search_sym regexp replacement &optional
                                                     subexp matchers)
@@ -478,9 +479,6 @@ based on additional criteria."
                                                    pl))))))))))))))
             (replace-match replacement nil nil nil subexp)))))))
 
-
-
-
 (defun scad-prettify-format-braces ()
   "Remove extra blank lines before closing braces in the buffer."
   (save-excursion
@@ -518,7 +516,6 @@ based on additional criteria."
                  (save-excursion
                    (forward-char 1)
                    (newline-and-indent)))))))))
-
 
 (defun scad-prettify--top-level-p (&optional pos)
   "Determine if POS is at top-level, not in a comment or string.
@@ -581,7 +578,6 @@ Optional argument POS is a buffer position, defaulting to the current point."
                   (delete-region start end)
                   (save-excursion
                     (insert rep)))))))))))
-
 
 (defun scad-prettify--goto-line (line)
   "Move cursor to line LINE."
@@ -655,8 +651,6 @@ END."
       (kill-buffer patchbuf)
       (delete-file outputfile))))
 
-
-
 (defun scad-prettify-indent-buffer-ignore-comments ()
   "Indent each top-level expression in the buffer, skipping comments and includes."
   (goto-char (point-min))
@@ -713,7 +707,6 @@ END."
                           (_ (> (skip-chars-forward "^;,)]([\"/") 0)))))))))
     (< start (or end (point)))))
 
-
 (defun scad-prettify--forward-symbol (&optional definition)
   "Return symbol at point, moving forward over allowed identifier characters.
 
@@ -755,8 +748,6 @@ defaults to nil."
           (when (= curr-line (line-number-at-pos (point)))
             (newline-and-indent))
           (scad-prettify--forward-sexp))))))
-
-
 
 (defun scad-prettify-align-args ()
   "Align function call arguments by inserting newlines and removing commas."
@@ -854,7 +845,6 @@ defaults to nil."
                                        rep))
             sorted))))))
 
-
 (defun scad-prettify-sort-project-imports ()
   "Sort imports in all .scad files in the current project, saving changes."
   (interactive)
@@ -885,8 +875,6 @@ defaults to nil."
             (when (scad-prettify-sort-imports)
               (write-region nil nil file nil nil))))
         (sit-for 0.01)))))
-
-
 
 ;;;###autoload
 (defun scad-prettify-buffer ()
