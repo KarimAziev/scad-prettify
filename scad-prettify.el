@@ -49,7 +49,9 @@
 (require 'subr-x)
 (eval-when-compile
   (require 'rx))
+
 (require 'scad-mode)
+(require 'project)
 
 
 (defcustom scad-prettify-regexp-replacement-rules `((re-search-forward
@@ -268,8 +270,12 @@ when negated), then that candidate match is rejected and skipped."
                         :value :predicate)
                        (function :tag "Custom predicate function")))))))))
 
+
 (defcustom scad-prettify-formatters '(scad-prettify-format-braces
-                                      scad-prettify-align-variables)
+                                      scad-prettify-align-args
+                                      scad-prettify-indent-buffer-ignore-comments
+                                      scad-prettify-align-variables
+                                      scad-prettify-sort-imports)
   "List of functions to format SCAD code, such as adjusting braces and alignment.
 
 Each function in the list should take no arguments and perform a specific
@@ -280,10 +286,19 @@ is triggered."
   :group 'scad-prettify
   :type 'hook)
 
+(defconst scad-prettify--comment-start-re "//\\|/\\*")
+
 (defconst scad-prettify--variable-regex
   "^[[:space:]]*\\([0-9A-Z_a-z]*\\)[[:space:]]*\\(=\\)[[:space:]]*\\([^=][^;]+;\\)"
   "Regex pattern matching SCAD variable declarations.")
 
+(defconst scad-prettify--include-and-use-regexp
+  "\\_<\\(include\\|use\\)\\_>[\s]*<\\([.A-Za-z_/][^>]*\\)>"
+  "Regular expression matching SCAD include and use statements.")
+
+(defconst scad-prettify--include-regexp
+  "\\_<\\(include\\)\\_>[\s]*<\\([.A-Za-z_/][^>]*\\)>"
+  "Regular expression matching SCAD include statements.")
 
 (defun scad-prettify--inside-string-or-comment-p ()
   "Determine if the point is inside a string or comment."
@@ -297,6 +312,88 @@ is triggered."
                  scad-prettify-regexp-replacement-rules)
     (scad-prettify--replace-in-buffer search_sym regexp replacement subexp
                                       matchers)))
+
+
+(defun scad-prettify--all-pass (filters)
+  "Create an unary predicate function from FILTERS.
+Return t if every one of the provided predicates is satisfied by provided
+ argument."
+  (lambda (item)
+    (not (catch 'found
+           (dolist (filter filters)
+             (unless (funcall filter item)
+               (throw 'found t)))))))
+(defun scad-prettify--project-files (project &rest filters)
+  "Filter PROJECT files using optional sequential filters.
+
+Argument PROJECT is a representation of the current project to access files
+within it.
+
+Optional argument FILTERS is a list of additional filtering predicates applied
+to each file within the project."
+  (let ((filter
+         (if filters
+             (scad-prettify--all-pass (append (list #'file-exists-p) filters))
+           #'file-exists-p)))
+    (seq-filter
+     filter
+     (project-files project))))
+(defun scad-prettify--project-name (&optional project)
+  "Return expanded PROJECT root directory path for project or current project.
+
+Optional argument PROJECT specifies the current project object. If not provided,
+it attempts to use the current PROJECT by default."
+  (when-let* ((project (or project
+                           (ignore-errors (project-current))))
+              (proj-dir (if (fboundp 'project-root)
+                            (project-root (or project))
+                          (with-no-warnings
+                            (car (project-roots project))))))
+    (expand-file-name proj-dir)))
+(defun scad-prettify--project-scad-files (project &rest filters)
+  "Filter and list PROJECT files with \".scad\" extension, applying FILTERS.
+
+Argument PROJECT is a representation of the current project to access files
+within it.
+
+Remaining arguments FILTERS are additional filtering predicates applied to each
+file within the project."
+  (let ((base-filter (lambda (file)
+                       (when-let* ((ext (file-name-extension file)))
+                         (string= ext "scad")))))
+    (apply #'scad-prettify--project-files
+           project
+           (if filters
+               (append (list base-filter) filters)
+             (list base-filter)))))
+(defun scad-prettify--backward-whitespace ()
+  "Skip backward over whitespace and comments."
+  (while (progn
+           (skip-chars-backward "\s\t\n")
+           (let ((pps (syntax-ppss (point))))
+             (and (> (point)
+                     (point-min))
+                  (cond ((nth 4 pps)
+                         (goto-char (nth 8 pps))
+                         t)
+                        ((looking-back "\\*/" 0)
+                         (forward-comment -1)
+                         t)))))))
+
+(defun scad-prettify--forward-whitespace ()
+  "Advance the point past whitespace and comments in the buffer."
+  (let ((pps (syntax-ppss (point)))
+        (pos (point)))
+    (cond ((nth 4 pps)
+           (goto-char (nth 8 pps))
+           (forward-comment 1)
+           (skip-chars-forward "\s\t\n"))
+          (t
+           (skip-chars-forward "\s\t\n")))
+    (while (looking-at scad-prettify--comment-start-re)
+      (forward-comment 1)
+      (skip-chars-forward "\s\t\n"))
+    (- (point) pos)))
 
 
 (defun scad-prettify--replace-in-buffer (search_sym regexp replacement &optional
@@ -474,8 +571,10 @@ Optional argument POS is a buffer position, defaulting to the current point."
                            (first-line (pop lines))
                            (spaces (make-string (1+ (length rep)) ?\s)))
                       (setq lines (mapconcat (lambda (line)
-                                               (concat spaces
-                                                       (string-trim line)))
+                                               (if (string-prefix-p spaces line)
+                                                   line
+                                                 (concat spaces
+                                                         (string-trim line))))
                                              lines
                                              "\n"))
                       (setq rep (concat rep first-line "\n" lines))))
@@ -558,6 +657,237 @@ END."
 
 
 
+(defun scad-prettify-indent-buffer-ignore-comments ()
+  "Indent each top-level expression in the buffer, skipping comments and includes."
+  (goto-char (point-min))
+  (while
+      (progn
+        (scad-prettify--forward-whitespace)
+        (cond ((looking-at scad-prettify--include-and-use-regexp)
+               (forward-line 1))
+              ((eobp)
+               nil)
+              (t
+               (when-let* ((start (point))
+                           (end
+                            (when (scad-prettify--forward-sexp)
+                              (point))))
+                 (when (looking-at ";")
+                   (forward-char 1)
+                   (setq end (1+ end)))
+                 (indent-region start
+                                end)
+                 t))))))
+
+(defun scad-prettify--forward-sexp ()
+  "Move forward over a SCAD expression, handling comments and whitespace."
+  (let ((max-pos (point-max))
+        (start (point))
+        (end))
+    (while
+        (and (not end)
+             (progn
+               (scad-prettify--forward-whitespace)
+               (when (> max-pos (point))
+                 (cond ((looking-at scad-prettify--include-and-use-regexp)
+                        (end-of-line 1)
+                        (setq end (point)))
+                       (t
+                        (pcase (char-to-string (char-after (point)))
+                          ("{" (forward-sexp)
+                           nil)
+                          ((or "(" "[" "\"")
+                           (forward-sexp)
+                           (> max-pos
+                              (point)))
+                          ("/"
+                           (if
+                               (not (looking-at scad-prettify--comment-start-re))
+                               (progn (forward-char 1)
+                                      (> (point-max)
+                                         (point)))
+                             (scad-prettify--forward-whitespace)
+                             (> max-pos
+                                (point))))
+                          ((or ")" "]" "}" "," ";") nil)
+                          (_ (> (skip-chars-forward "^;,)]([\"/") 0)))))))))
+    (< start (or end (point)))))
+
+
+(defun scad-prettify--forward-symbol (&optional definition)
+  "Return symbol at point, moving forward over allowed identifier characters.
+
+Optional argument DEFINITION is non-nil to parse a definition symbol;
+defaults to nil."
+  (let ((case-fold-search t))
+    (cond (definition
+           (when-let* ((pos (and (looking-at "[a-z_]")
+                                 (point))))
+             (buffer-substring-no-properties pos
+                                             (+ pos
+                                                (skip-chars-forward
+                                                 "a-zA-Z_0-9")))))
+          (t
+           (when-let* ((pos (and (looking-at "[$a-z_]")
+                                 (point))))
+             (buffer-substring-no-properties pos
+                                             (+ pos
+                                                (skip-chars-forward
+                                                 "a-z_0-9$"))))))))
+
+(defun scad-prettify--align-args-at-point ()
+  "Align arguments after point by inserting newlines and removing trailing commas."
+  (scad-prettify--forward-sexp)
+  (let ((last-comma-pos))
+    (while (looking-at ",")
+      (setq last-comma-pos (point))
+      (forward-char 1)
+      (let ((curr-line (line-number-at-pos (point))))
+        (scad-prettify--forward-whitespace)
+        (if (looking-at ")\\|\\]")
+            (delete-region last-comma-pos
+                           (if (string-empty-p
+                                (string-trim (buffer-substring-no-properties
+                                              (1+ last-comma-pos)
+                                              (point))))
+                               (point)
+                             (1+ last-comma-pos)))
+          (when (= curr-line (line-number-at-pos (point)))
+            (newline-and-indent))
+          (scad-prettify--forward-sexp))))))
+
+
+
+(defun scad-prettify-align-args ()
+  "Align function call arguments by inserting newlines and removing commas."
+  (save-excursion
+    (save-match-data
+      (goto-char (point-min))
+      (while
+          (let ((case-fold-search t))
+            (re-search-forward "#?\\([a-z]\\([a-z_0-9$]*\\)\\)[\s\t]*("
+                               nil
+                               t 1))
+        (let ((symb (match-string-no-properties 1)))
+          (unless (or (scad-prettify--inside-string-or-comment-p)
+                      (looking-at ")")
+                      (save-excursion
+                        (forward-char -1)
+                        (let ((line-start (line-number-at-pos (point)))
+                              (line-end))
+                          (condition-case nil
+                              (progn
+                                (forward-sexp 1)
+                                (setq line-end
+                                      (line-number-at-pos (point))))
+                            (error nil))
+                          (or (not line-end)
+                              (and (equal line-end line-start)
+                                   (> fill-column (current-column)))))))
+            (when (equal symb "translate")
+              (forward-char 1)
+              (scad-prettify--forward-whitespace))
+            (scad-prettify--align-args-at-point)))))))
+
+(defun scad-prettify-sort-imports ()
+  "Sort and deduplicate include/use statements, replacing the import block."
+  (save-excursion
+    (save-match-data
+      (goto-char (point-min))
+      (let ((start)
+            (end)
+            (imports))
+        (while
+            (when (re-search-forward scad-prettify--include-and-use-regexp nil t
+                                     1)
+              (or (scad-prettify--inside-string-or-comment-p)
+                  (progn (setq start (line-beginning-position))
+                         (setq imports
+                               (push
+                                (string-trim
+                                 (buffer-substring-no-properties start
+                                                                 (line-end-position)))
+                                imports))
+                         nil))))
+        (when start
+          (while (and (zerop (forward-line))
+                      (progn
+                        (let ((imp-beg (point)))
+                          (scad-prettify--forward-whitespace)
+                          (when (looking-at
+                                 scad-prettify--include-and-use-regexp)
+                            (push
+                             (string-trim
+                              (buffer-substring-no-properties imp-beg
+                                                              (line-end-position)))
+                             imports))))))
+          (scad-prettify--backward-whitespace)
+          (setq end (point)))
+        (when (and imports start end)
+          (let* ((re-start (concat "^" scad-prettify--include-and-use-regexp))
+                 (sorted (seq-sort-by (lambda (imp)
+                                        (if (or (string-prefix-p "include" imp)
+                                                (string-prefix-p "use" imp))
+                                            imp
+                                          (let ((item (car (seq-drop-while
+                                                            (lambda (it)
+                                                              (not
+                                                               (string-match-p
+                                                                re-start it)))
+                                                            (split-string imp
+                                                                          "[\n\r\f]"
+                                                                          t)))))
+                                            item)))
+                                      #'string<
+                                      (delete-dups
+                                       imports)))
+                 (rep (with-temp-buffer
+                        (insert (string-join sorted "\n"))
+                        (when (re-search-backward
+                               scad-prettify--include-regexp
+                               nil t 1)
+                          (goto-char (line-end-position))
+                          (insert "\n"))
+                        (buffer-string))))
+            (replace-region-contents start end
+                                     (lambda ()
+                                       rep))
+            sorted))))))
+
+
+(defun scad-prettify-sort-project-imports ()
+  "Sort imports in all .scad files in the current project, saving changes."
+  (interactive)
+  (let* ((project (ignore-errors (project-current)))
+         (files (scad-prettify--project-scad-files project))
+         (project-dir (if project
+                          (scad-prettify--project-name project)
+                        default-directory))
+         (file))
+    (sit-for 0.01)
+    (while (setq file (pop files))
+      (setq file (expand-file-name file))
+      (let ((shortname (substring-no-properties
+                        file
+                        (length project-dir)))
+            (buff (get-file-buffer file)))
+        (message "Checking %s" shortname)
+        (if (buffer-live-p buff)
+            (with-current-buffer buff
+              (let ((buff-modified (buffer-modified-p)))
+                (scad-prettify-sort-imports)
+                (unless buff-modified
+                  (save-buffer))))
+          (with-temp-buffer
+            (insert-file-contents file)
+            (let ((scad-mode-hook nil))
+              (scad-mode))
+            (when (scad-prettify-sort-imports)
+              (write-region nil nil file nil nil))))
+        (sit-for 0.01)))))
+
+
+
 ;;;###autoload
 (defun scad-prettify-buffer ()
   "Format the buffer by adjusting braces, aligning variables, and indenting."
@@ -566,15 +896,13 @@ END."
          (result (with-temp-buffer
                    (insert-buffer-substring buff)
                    (let ((scad-mode-hook nil))
-                     (scad-mode))
-                   (hack-local-variables)
-                   (let ((indent-tabs-mode nil)
-                         (inhibit-message t))
-                     (scad-prettify--format-by-regex)
-                     (run-hooks 'scad-prettify-formatters)
-                     (indent-region (point-min)
-                                    (point-max))
-                     (buffer-string)))))
+                     (scad-mode)
+                     (hack-local-variables)
+                     (let ((indent-tabs-mode nil)
+                           (inhibit-message t))
+                       (scad-prettify--format-by-regex)
+                       (run-hooks 'scad-prettify-formatters)))
+                   (buffer-string))))
     (unless (string= (buffer-substring-no-properties (point-min)
                                                      (point-max))
                      result)
