@@ -651,6 +651,26 @@ END."
       (kill-buffer patchbuf)
       (delete-file outputfile))))
 
+
+(defun scad-prettify--indent-region-line-by-line (start end)
+  "Indent each non-empty line between START and END according to mode.
+
+This function is the same as `indent-region-line-by-line' but it doesn't display
+progress reporter messages.
+
+Argument START is the buffer position where indentation begins.
+
+Argument END is the buffer position where indentation ends."
+  (save-excursion
+    (setq end (copy-marker end))
+    (goto-char start)
+    (while (< (point) end)
+      (or (and (bolp)
+               (eolp))
+          (indent-according-to-mode t))
+      (forward-line 1))
+    (move-marker end nil)))
+
 (defun scad-prettify-indent-buffer-ignore-comments ()
   "Indent each top-level expression in the buffer, skipping comments and includes."
   (goto-char (point-min))
@@ -669,8 +689,9 @@ END."
                  (when (looking-at ";")
                    (forward-char 1)
                    (setq end (1+ end)))
-                 (indent-region start
-                                end)
+                 (let ((indent-region-function
+                        #'scad-prettify--indent-region-line-by-line))
+                   (indent-region start end))
                  t))))))
 
 (defun scad-prettify--forward-sexp ()
