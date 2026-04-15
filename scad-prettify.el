@@ -674,25 +674,26 @@ Argument END is the buffer position where indentation ends."
 (defun scad-prettify-indent-buffer-ignore-comments ()
   "Indent each top-level expression in the buffer, skipping comments and includes."
   (goto-char (point-min))
-  (while
-      (progn
-        (scad-prettify--forward-whitespace)
-        (cond ((looking-at scad-prettify--include-and-use-regexp)
-               (forward-line 1))
-              ((eobp)
-               nil)
-              (t
-               (when-let* ((start (point))
-                           (end
-                            (when (scad-prettify--forward-sexp)
-                              (point))))
-                 (when (looking-at ";")
-                   (forward-char 1)
-                   (setq end (1+ end)))
-                 (let ((indent-region-function
-                        #'scad-prettify--indent-region-line-by-line))
-                   (indent-region start end))
-                 t))))))
+  (ignore-errors
+    (while
+        (progn
+          (scad-prettify--forward-whitespace)
+          (cond ((looking-at scad-prettify--include-and-use-regexp)
+                 (forward-line 1))
+                ((eobp)
+                 nil)
+                (t
+                 (when-let* ((start (point))
+                             (end
+                              (when (scad-prettify--forward-sexp)
+                                (point))))
+                   (when (looking-at ";")
+                     (forward-char 1)
+                     (setq end (1+ end)))
+                   (let ((indent-region-function
+                          #'scad-prettify--indent-region-line-by-line))
+                     (indent-region start end))
+                   t)))))))
 
 (defun scad-prettify--forward-sexp ()
   "Move forward over a SCAD expression, handling comments and whitespace."
